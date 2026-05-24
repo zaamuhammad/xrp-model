@@ -574,9 +574,8 @@ if "future_pred"       not in st.session_state: st.session_state.future_pred    
 if "nxt"               not in st.session_state: st.session_state.nxt               = None
 if "pred_high"         not in st.session_state: st.session_state.pred_high         = None
 if "pred_low"          not in st.session_state: st.session_state.pred_low          = None
-if "already_predicted" not in st.session_state: st.session_state.already_predicted = False
 
-if run_btn or not st.session_state.already_predicted:
+if run_btn:
     model, scaler, errors = load_model_scaler()
 
     if model is None or scaler is None:
@@ -605,7 +604,6 @@ if run_btn or not st.session_state.already_predicted:
                 st.session_state.nxt                = future_pred[0]
                 st.session_state.pred_high          = float(max(future_pred))
                 st.session_state.pred_low           = float(min(future_pred))
-                st.session_state.already_predicted  = True
             except Exception as ex:
                 st.error(f"❌ Error prediksi: {ex}")
                 st.exception(ex)
