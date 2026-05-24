@@ -342,33 +342,11 @@ with st.sidebar:
 
 @st.cache_data(ttl=3600)
 def fetch_data(period):
-    url = "https://api.coingecko.com/api/v3/coins/ripple/market_chart"
+    ticker = yf.Ticker("XRP-USD")
+    df = ticker.history(period=period)
 
-    days_map = {
-        "1mo": 30,
-        "2mo": 60,
-        "3mo": 90,
-        "6mo": 180,
-        "1y":  365,
-    }
-
-    params = {
-        "vs_currency": "usd",
-        "days": days_map.get(period, 365)
-    }
-
-    r = requests.get(url, params=params, timeout=10).json()
-    prices = r["prices"]
-
-    df = pd.DataFrame(prices, columns=["timestamp", "Close"])
-    df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
-    df.set_index("Date", inplace=True)
-
-    df["Open"] = df["Close"].shift(1)
-    df["Open"].iloc[0] = df["Close"].iloc[0]
-    df["High"] = df[["Open", "Close"]].max(axis=1) * 1.01
-    df["Low"]  = df[["Open", "Close"]].min(axis=1) * 0.99
-    df["Volume"] = 0
+    if df.empty:
+        raise ValueError("Data kosong dari Yahoo Finance")
 
     df = df[["Open", "High", "Low", "Close", "Volume"]]
     df.dropna(inplace=True)
@@ -504,7 +482,7 @@ def line_chart(df_hist, hist_dates, hist_pred, future_dates, future_pred, close_
     return fig
 
 # ─── FETCH DATA ───────────────────────────────────────────────────────────────
-with st.spinner("🔄 Mengambil data XRP/USDT dari CoinGecko..."):
+with st.spinner("🔄 Mengambil data XRP/USDT dari Yahoo Finance..."):
     try:
         df = fetch_data(period)
         if len(df) < WINDOW + 2:
