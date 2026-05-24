@@ -342,25 +342,63 @@ with st.sidebar:
 
 @st.cache_data(ttl=3600)
 def fetch_data(period):
+    import time
+
     days_map = {"1mo": 30, "2mo": 60, "3mo": 90, "6mo": 180, "1y": 365}
     days = days_map.get(period, 60)
 
-    url    = "https://api.coingecko.com/api/v3/coins/ripple/ohlc"
-    params = {"vs_currency": "usd", "days": days}
+    # Coba endpoint market_chart dulu
+    urls = [
+        {
+            "url": "https://api.coingecko.com/api/v3/coins/ripple/market_chart",
+            "params": {"vs_currency": "usd", "days": days, "interval": "daily"},
+            "type": "market_chart"
+        },
+        {
+            "url": "https://api.coingecko.com/api/v3/coins/ripple/ohlc",
+            "params": {"vs_currency": "usd", "days": days},
+            "type": "ohlc"
+        }
+    ]
 
-    r = requests.get(url, params=params, timeout=15)
-    data = r.json()
+    for endpoint in urls:
+        for attempt in range(3):
+            try:
+                time.sleep(2)  # jeda sebelum request
+                r = requests.get(endpoint["url"], params=endpoint["params"], timeout=20)
+                if r.status_code == 429:
+                    time.sleep(15 * (attempt + 1))
+                    continue
+                if r.status_code != 200:
+                    continue
+                data = r.json()
 
-    if not isinstance(data, list) or len(data) == 0:
-        raise ValueError(f"Data kosong. Status: {r.status_code}")
+                if endpoint["type"] == "ohlc":
+                    if isinstance(data, list) and len(data) > 0:
+                        df = pd.DataFrame(data, columns=["timestamp", "Open", "High", "Low", "Close"])
+                        df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
+                        df.set_index("Date", inplace=True)
+                        df["Volume"] = 0
+                        df = df[["Open", "High", "Low", "Close", "Volume"]]
+                        df.dropna(inplace=True)
+                        return df
 
-    df = pd.DataFrame(data, columns=["timestamp", "Open", "High", "Low", "Close"])
-    df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
-    df.set_index("Date", inplace=True)
-    df["Volume"] = 0
-    df = df[["Open", "High", "Low", "Close", "Volume"]]
-    df.dropna(inplace=True)
-    return df
+                elif endpoint["type"] == "market_chart":
+                    if "prices" in data and len(data["prices"]) > 0:
+                        df = pd.DataFrame(data["prices"], columns=["timestamp", "Close"])
+                        df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
+                        df.set_index("Date", inplace=True)
+                        df["Open"]   = df["Close"].shift(1).fillna(df["Close"])
+                        df["High"]   = df[["Open", "Close"]].max(axis=1) * 1.01
+                        df["Low"]    = df[["Open", "Close"]].min(axis=1) * 0.99
+                        df["Volume"] = 0
+                        df = df[["Open", "High", "Low", "Close", "Volume"]]
+                        df.dropna(inplace=True)
+                        return df
+            except Exception:
+                time.sleep(5)
+
+    raise ValueError("Gagal mengambil data. Coba refresh halaman dalam beberapa menit.")
 
 @st.cache_resource
 def load_model_scaler():
