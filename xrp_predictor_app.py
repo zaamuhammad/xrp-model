@@ -556,13 +556,17 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ─── PREDICTION CARDS ─────────────────────────────────────────────────────────
 st.markdown('<div class="sec">Analisis Prediksi LSTM</div>', unsafe_allow_html=True)
 
-close_arr     = df["Close"].values
-hist_dates    = None
-hist_pred_arr = None
-future_dates  = []
-future_pred   = None
-nxt = pred_high = pred_low = None
+close_arr = df["Close"].values
 risk_label, risk_cls, risk_desc = calc_risk(close_arr)
+
+# Inisialisasi session_state
+if "hist_dates"    not in st.session_state: st.session_state.hist_dates    = None
+if "hist_pred_arr" not in st.session_state: st.session_state.hist_pred_arr = None
+if "future_dates"  not in st.session_state: st.session_state.future_dates  = []
+if "future_pred"   not in st.session_state: st.session_state.future_pred   = None
+if "nxt"           not in st.session_state: st.session_state.nxt           = None
+if "pred_high"     not in st.session_state: st.session_state.pred_high     = None
+if "pred_low"      not in st.session_state: st.session_state.pred_low      = None
 
 if run_btn:
     model, scaler, errors = load_model_scaler()
@@ -585,14 +589,39 @@ if run_btn:
                 future_dates  = [df.index[-1] + timedelta(days=i+1) for i in range(n_future)]
                 hist_pred_arr = predict_history(model, scaler, close_arr, WINDOW)
                 hist_dates    = df.index[WINDOW:]
-                nxt           = future_pred[0]
-                pred_high     = float(max(future_pred))
-                pred_low      = float(min(future_pred))
+
+                st.session_state.future_pred   = future_pred
+                st.session_state.future_dates  = future_dates
+                st.session_state.hist_pred_arr = hist_pred_arr
+                st.session_state.hist_dates    = hist_dates
+                st.session_state.nxt           = future_pred[0]
+                st.session_state.pred_high     = float(max(future_pred))
+                st.session_state.pred_low      = float(min(future_pred))
             except Exception as ex:
                 st.error(f"❌ Error prediksi: {ex}")
                 st.exception(ex)
 
-p1, p2, p3, p4, p5 = st.columns(5)
+# Ambil dari session_state
+hist_dates    = st.session_state.hist_dates
+hist_pred_arr = st.session_state.hist_pred_arr
+future_dates  = st.session_state.future_dates
+future_pred   = st.session_state.future_pred
+nxt           = st.session_state.nxt
+pred_high     = st.session_state.pred_high
+pred_low      = st.session_state.pred_low
+
+# ─── RISK BANNER ──────────────────────────────────────────────────────────────
+_, rb, _ = st.columns([3, 4, 3])
+with rb:
+    st.markdown(f"""<div class="pcard">
+        <div class="pcard-lbl">LEVEL RISIKO</div>
+        <div class="pcard-val {risk_cls}" style="font-size:1.05rem">{risk_label}</div>
+        <div class="pcard-sub" style="color:#64748b">{risk_desc}</div>
+    </div>""", unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+p1, p2, p3, p4 = st.columns(4)
 
 with p1:
     if nxt is not None:
@@ -650,13 +679,6 @@ with p4:
         <div class="pcard-lbl">RANGE PREDIKSI</div>
         <div class="pcard-val" style="color:#a78bfa">{val}</div>
         <div class="pcard-sub">{sub}</div>
-    </div>""", unsafe_allow_html=True)
-
-with p5:
-    st.markdown(f"""<div class="pcard">
-        <div class="pcard-lbl">LEVEL RISIKO</div>
-        <div class="pcard-val {risk_cls}" style="font-size:1.05rem">{risk_label}</div>
-        <div class="pcard-sub" style="color:#64748b">{risk_desc}</div>
     </div>""", unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
