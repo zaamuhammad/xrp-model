@@ -527,8 +527,10 @@ dc = "pos" if chg >= 0 else "neg"
 
 st.markdown('<div class="sec">Market Overview</div>', unsafe_allow_html=True)
 
-# 3 kolom rata tengah — pakai spacer kiri & kanan
-_, m1, m2, m3, _ = st.columns([0.5, 3, 3, 3, 0.5])
+close_arr_tmp = df["Close"].values
+risk_label, risk_cls, risk_desc = calc_risk(close_arr_tmp)
+
+m1, m2, m3, m4 = st.columns(4)
 
 with m1:
     st.markdown(f"""<div class="card">
@@ -551,7 +553,12 @@ with m3:
         <div class="card-sub neg">▼ {((l30 - cur) / cur * 100):.2f}% dari skrg</div>
     </div>""", unsafe_allow_html=True)
 
-st.markdown("<br>", unsafe_allow_html=True)
+with m4:
+    st.markdown(f"""<div class="card">
+        <div class="card-lbl">LEVEL RISIKO</div>
+        <div class="card-val {risk_cls}" style="font-size:1.35rem">{risk_label}</div>
+        <div class="card-sub">{risk_desc}</div>
+    </div>""", unsafe_allow_html=True)
 
 # ─── PREDICTION CARDS ─────────────────────────────────────────────────────────
 st.markdown('<div class="sec">Analisis Prediksi LSTM</div>', unsafe_allow_html=True)
@@ -560,15 +567,16 @@ close_arr = df["Close"].values
 risk_label, risk_cls, risk_desc = calc_risk(close_arr)
 
 # Inisialisasi session_state
-if "hist_dates"    not in st.session_state: st.session_state.hist_dates    = None
-if "hist_pred_arr" not in st.session_state: st.session_state.hist_pred_arr = None
-if "future_dates"  not in st.session_state: st.session_state.future_dates  = []
-if "future_pred"   not in st.session_state: st.session_state.future_pred   = None
-if "nxt"           not in st.session_state: st.session_state.nxt           = None
-if "pred_high"     not in st.session_state: st.session_state.pred_high     = None
-if "pred_low"      not in st.session_state: st.session_state.pred_low      = None
+if "hist_dates"        not in st.session_state: st.session_state.hist_dates        = None
+if "hist_pred_arr"     not in st.session_state: st.session_state.hist_pred_arr     = None
+if "future_dates"      not in st.session_state: st.session_state.future_dates      = []
+if "future_pred"       not in st.session_state: st.session_state.future_pred       = None
+if "nxt"               not in st.session_state: st.session_state.nxt               = None
+if "pred_high"         not in st.session_state: st.session_state.pred_high         = None
+if "pred_low"          not in st.session_state: st.session_state.pred_low          = None
+if "already_predicted" not in st.session_state: st.session_state.already_predicted = False
 
-if run_btn:
+if run_btn or not st.session_state.already_predicted:
     model, scaler, errors = load_model_scaler()
 
     if model is None or scaler is None:
@@ -590,13 +598,14 @@ if run_btn:
                 hist_pred_arr = predict_history(model, scaler, close_arr, WINDOW)
                 hist_dates    = df.index[WINDOW:]
 
-                st.session_state.future_pred   = future_pred
-                st.session_state.future_dates  = future_dates
-                st.session_state.hist_pred_arr = hist_pred_arr
-                st.session_state.hist_dates    = hist_dates
-                st.session_state.nxt           = future_pred[0]
-                st.session_state.pred_high     = float(max(future_pred))
-                st.session_state.pred_low      = float(min(future_pred))
+                st.session_state.future_pred        = future_pred
+                st.session_state.future_dates       = future_dates
+                st.session_state.hist_pred_arr      = hist_pred_arr
+                st.session_state.hist_dates         = hist_dates
+                st.session_state.nxt                = future_pred[0]
+                st.session_state.pred_high          = float(max(future_pred))
+                st.session_state.pred_low           = float(min(future_pred))
+                st.session_state.already_predicted  = True
             except Exception as ex:
                 st.error(f"❌ Error prediksi: {ex}")
                 st.exception(ex)
@@ -611,15 +620,6 @@ pred_high     = st.session_state.pred_high
 pred_low      = st.session_state.pred_low
 
 # ─── RISK BANNER ──────────────────────────────────────────────────────────────
-_, rb, _ = st.columns([3, 4, 3])
-with rb:
-    st.markdown(f"""<div class="pcard">
-        <div class="pcard-lbl">LEVEL RISIKO</div>
-        <div class="pcard-val {risk_cls}" style="font-size:1.05rem">{risk_label}</div>
-        <div class="pcard-sub" style="color:#64748b">{risk_desc}</div>
-    </div>""", unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
 
 p1, p2, p3, p4 = st.columns(4)
 
