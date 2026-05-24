@@ -342,37 +342,21 @@ with st.sidebar:
 
 @st.cache_data(ttl=3600)
 def fetch_data(period):
-    # ── Coba Yahoo Finance dulu ──
-    try:
-        df = yf.download("XRP-USD", period=period, progress=False, auto_adjust=True)
-        if not df.empty:
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
-            df = df[["Open", "High", "Low", "Close", "Volume"]]
-            df.dropna(inplace=True)
-            if not df.empty:
-                return df
-    except Exception:
-        pass
+    df = yf.download("XRP-USD", period=period, progress=False, auto_adjust=True)
 
-    # ── Fallback: CoinGecko ──
-    days_map = {"1mo":30,"2mo":60,"3mo":90,"6mo":180,"1y":365}
-    url    = "https://api.coingecko.com/api/v3/coins/ripple/market_chart"
-    params = {"vs_currency":"usd","days":days_map.get(period,365)}
-    r      = requests.get(url, params=params, timeout=15).json()
+    if df.empty:
+        raise ValueError("Data kosong dari Yahoo Finance")
 
-    if "prices" not in r:
-        raise ValueError("Kedua sumber data gagal. Coba lagi nanti.")
+    # Handle MultiIndex columns
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
 
-    df = pd.DataFrame(r["prices"], columns=["timestamp","Close"])
-    df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
-    df.set_index("Date", inplace=True)
-    df["Open"]   = df["Close"].shift(1).fillna(df["Close"])
-    df["High"]   = df[["Open","Close"]].max(axis=1) * 1.01
-    df["Low"]    = df[["Open","Close"]].min(axis=1) * 0.99
-    df["Volume"] = 0
-    df = df[["Open","High","Low","Close","Volume"]]
+    df = df[["Open", "High", "Low", "Close", "Volume"]]
     df.dropna(inplace=True)
+
+    if df.empty:
+        raise ValueError("Data kosong setelah dropna")
+
     return df
 
 @st.cache_resource
