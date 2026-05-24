@@ -343,20 +343,10 @@ with st.sidebar:
 @st.cache_data(ttl=3600)
 def fetch_data(period):
     df = yf.download("XRP-USD", period=period, progress=False, auto_adjust=True)
-
-    if df.empty:
-        raise ValueError("Data kosong dari Yahoo Finance")
-
-    # Handle MultiIndex columns
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
-    df = df[["Open", "High", "Low", "Close", "Volume"]]
-    df.dropna(inplace=True)
-
-    if df.empty:
-        raise ValueError("Data kosong setelah dropna")
-
+    st.write("Shape:", df.shape)
+    st.write("Columns:", df.columns.tolist())
+    st.write(df.head())
+    st.stop()
     return df
 
 @st.cache_resource
