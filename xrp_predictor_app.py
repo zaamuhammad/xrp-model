@@ -342,33 +342,17 @@ with st.sidebar:
 
 @st.cache_data(ttl=3600)
 def fetch_data(period):
-    import time
-
     days_map = {"1mo": 30, "2mo": 60, "3mo": 90, "6mo": 180, "1y": 365}
     days = days_map.get(period, 60)
 
     url    = "https://api.coingecko.com/api/v3/coins/ripple/ohlc"
     params = {"vs_currency": "usd", "days": days}
 
-    data = None
-    for attempt in range(5):
-        try:
-            r = requests.get(url, params=params, timeout=20)
-            if r.status_code == 429:
-                time.sleep(10 * (attempt + 1))
-                continue
-            if r.status_code != 200:
-                time.sleep(5)
-                continue
-            result = r.json()
-            if isinstance(result, list) and len(result) > 0:
-                data = result
-                break
-        except Exception:
-            time.sleep(5)
+    r = requests.get(url, params=params, timeout=15)
+    data = r.json()
 
-    if data is None:
-        raise ValueError("❌ Gagal mengambil data setelah 5 percobaan. Coba lagi nanti.")
+    if not isinstance(data, list) or len(data) == 0:
+        raise ValueError(f"Data kosong. Status: {r.status_code}")
 
     df = pd.DataFrame(data, columns=["timestamp", "Open", "High", "Low", "Close"])
     df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
