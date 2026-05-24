@@ -342,8 +342,7 @@ with st.sidebar:
 
 @st.cache_data(ttl=3600)
 def fetch_data(period):
-    ticker = yf.Ticker("XRP-USD")
-    df = ticker.history(period=period)
+    df = yf.download("XRP-USD", period=period, progress=False, auto_adjust=True)
 
     if df.empty:
         raise ValueError("Data kosong dari Yahoo Finance")
