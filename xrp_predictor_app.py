@@ -668,8 +668,12 @@ with p4:
     if pred_high is not None and pred_low is not None:
         rng = pred_high - pred_low
         rp  = rng / cur * 100
-        val = f"${rng:.4f}"
-        sub = f'<span style="color:#a78bfa">± {rp/2:.2f}% dari skrg</span>'
+        if rng == 0:
+            val = f"${pred_high:.4f}"
+            sub = f'<span style="color:#a78bfa">1 hari = 1 titik prediksi</span>'
+        else:
+            val = f"${rng:.4f}"
+            sub = f'<span style="color:#a78bfa">± {rp/2:.2f}% dari skrg</span>'
     else:
         val = '<span style="color:#1e3a5f;font-size:.9rem">Klik Prediksi</span>'
         sub = '<span style="color:#1e3a5f">——</span>'
