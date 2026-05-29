@@ -354,8 +354,10 @@ def fetch_data(period):
 
     # ── Coba Yahoo Finance dulu ──
     try:
-        df = yf.download("XRP-USD", period=period, progress=False, auto_adjust=True)
-        if not df.empty:
+        import contextlib, io
+        with contextlib.redirect_stderr(io.StringIO()):
+            df = yf.download("XRP-USD", period=period, progress=False, auto_adjust=True)
+        if df is not None and not df.empty:
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
             df = df[["Open", "High", "Low", "Close", "Volume"]]
