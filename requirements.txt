@@ -7,3 +7,4 @@ matplotlib==3.8.4
 plotly==5.22.0
 yfinance==0.2.40
 joblib==1.4.2
+pytz

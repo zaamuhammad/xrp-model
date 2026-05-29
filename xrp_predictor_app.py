@@ -10,6 +10,7 @@ import json
 import os
 from datetime import datetime, timedelta
 import warnings
+import pytz
 warnings.filterwarnings("ignore")
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
@@ -378,6 +379,7 @@ def fetch_data(period):
                         df = pd.DataFrame(data, columns=["timestamp", "Open", "High", "Low", "Close"])
                         df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
                         df.set_index("Date", inplace=True)
+                        df.index = df.index.tz_localize("UTC").tz_convert("Asia/Jakarta")
                         df["Volume"] = 0
                         df = df[["Open", "High", "Low", "Close", "Volume"]]
                         df.dropna(inplace=True)
@@ -388,6 +390,7 @@ def fetch_data(period):
                         df = pd.DataFrame(data["prices"], columns=["timestamp", "Close"])
                         df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
                         df.set_index("Date", inplace=True)
+                        df.index = df.index.tz_localize("UTC").tz_convert("Asia/Jakarta")
                         df["Open"]   = df["Close"].shift(1).fillna(df["Close"])
                         df["High"]   = df[["Open", "Close"]].max(axis=1) * 1.01
                         df["Low"]    = df[["Open", "Close"]].min(axis=1) * 0.99
@@ -733,8 +736,11 @@ if future_pred is not None and len(future_pred):
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 # ─── FOOTER ───────────────────────────────────────────────────────────────────
+wib = pytz.timezone("Asia/Jakarta")
+now_wib = datetime.now(wib)
+
 st.markdown(f"""
 <div class="footer">
-LAST UPDATE: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} ·
+LAST UPDATE: {now_wib.strftime("%Y-%m-%d %H:%M:%S")} WIB ·
 </div>
 """, unsafe_allow_html=True)
