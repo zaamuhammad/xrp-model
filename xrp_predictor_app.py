@@ -348,7 +348,6 @@ def fetch_data(period):
     days_map = {"1mo": 30, "2mo": 60, "3mo": 90, "6mo": 180, "1y": 365,}
     days = days_map.get(period, 60)
 
-    # Coba endpoint market_chart dulu
     urls = [
         {
             "url": "https://api.coingecko.com/api/v3/coins/ripple/market_chart",
@@ -365,7 +364,7 @@ def fetch_data(period):
     for endpoint in urls:
         for attempt in range(3):
             try:
-                time.sleep(2)  # jeda sebelum request
+                time.sleep(2)
                 r = requests.get(endpoint["url"], params=endpoint["params"], timeout=20)
                 if r.status_code == 429:
                     time.sleep(15 * (attempt + 1))
@@ -379,7 +378,8 @@ def fetch_data(period):
                         df = pd.DataFrame(data, columns=["timestamp", "Open", "High", "Low", "Close"])
                         df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
                         df.set_index("Date", inplace=True)
-                        df.index = df.index.tz_localize("UTC").tz_convert("Asia/Jakarta")
+                        # ✅ FIX: normalize() hapus komponen jam
+                        df.index = df.index.tz_localize("UTC").tz_convert("Asia/Jakarta").normalize()
                         df["Volume"] = 0
                         df = df[["Open", "High", "Low", "Close", "Volume"]]
                         df.dropna(inplace=True)
@@ -390,7 +390,8 @@ def fetch_data(period):
                         df = pd.DataFrame(data["prices"], columns=["timestamp", "Close"])
                         df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
                         df.set_index("Date", inplace=True)
-                        df.index = df.index.tz_localize("UTC").tz_convert("Asia/Jakarta")
+                        # ✅ FIX: normalize() hapus komponen jam
+                        df.index = df.index.tz_localize("UTC").tz_convert("Asia/Jakarta").normalize()
                         df["Open"]   = df["Close"].shift(1).fillna(df["Close"])
                         df["High"]   = df[["Open", "Close"]].max(axis=1) * 1.01
                         df["Low"]    = df[["Open", "Close"]].min(axis=1) * 0.99
@@ -483,7 +484,7 @@ def line_chart(df_hist, hist_dates, hist_pred, future_dates, future_pred, close_
         ))
 
     if future_pred is not None and len(future_pred):
-        conn_x = [df_hist.index[-1]] + future_dates
+        conn_x = [df_hist.index[-1]] + list(future_dates)
         conn_y = [df_hist["Close"].iloc[-1]] + list(future_pred)
 
         ub, lb = calc_confidence(close_arr, conn_y)
@@ -527,13 +528,17 @@ def line_chart(df_hist, hist_dates, hist_pred, future_dates, future_pred, close_
         hovermode="x unified",
         height=460,
         margin=dict(l=10, r=10, t=30, b=10),
-        xaxis=dict(gridcolor="#0f1f35", showgrid=True),
+        xaxis=dict(
+            gridcolor="#0f1f35",
+            showgrid=True,
+            tickformat="%d %b %Y",   # ✅ FIX: sumbu X tanpa jam
+        ),
         yaxis=dict(gridcolor="#0f1f35", showgrid=True, tickprefix="$", tickformat=".4f"),
     )
     return fig
 
 # ─── FETCH DATA ───────────────────────────────────────────────────────────────
-with st.spinner("🔄 Mengambil data XRP/USDT dari Yahoo Finance..."):
+with st.spinner("🔄 Mengambil data XRP/USDT dari CoinGecko..."):
     try:
         df = fetch_data(period)
         if len(df) < WINDOW + 2:
@@ -622,9 +627,17 @@ if run_btn:
         with st.spinner(f"Memprediksi {n_future} hari ke depan..."):
             try:
                 future_pred   = predict_future(model, scaler, close_arr, WINDOW, n_future)
-                future_dates  = [df.index[-1] + timedelta(days=i+1) for i in range(n_future)]
+
+                # ✅ FIX: future_dates pakai normalize() agar jam = 00:00
+                future_dates  = pd.DatetimeIndex([
+                    (df.index[-1] + timedelta(days=i+1)).normalize()
+                    for i in range(n_future)
+                ])
+
                 hist_pred_arr = predict_history(model, scaler, close_arr, WINDOW)
-                hist_dates    = df.index[WINDOW:]
+
+                # ✅ FIX: hist_dates pakai normalize() agar jam = 00:00
+                hist_dates    = df.index[WINDOW:].normalize()
 
                 st.session_state.future_pred        = future_pred
                 st.session_state.future_dates       = future_dates
@@ -646,8 +659,7 @@ nxt           = st.session_state.nxt
 pred_high     = st.session_state.pred_high
 pred_low      = st.session_state.pred_low
 
-# ─── RISK BANNER ──────────────────────────────────────────────────────────────
-
+# ─── PREDICTION DISPLAY CARDS ─────────────────────────────────────────────────
 p1, p2, p3, p4 = st.columns(4)
 
 with p1:
