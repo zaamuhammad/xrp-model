@@ -352,27 +352,7 @@ def fetch_data(period):
     days_map = {"1mo": 30, "2mo": 60, "3mo": 90, "6mo": 180, "1y": 365, "2y": 730, "3y": 1095, "4y": 1460, "5y": 1825}
     days = days_map.get(period, 60)
 
-    # ── Coba Yahoo Finance dulu ──
-    try:
-        import contextlib, io
-        with contextlib.redirect_stderr(io.StringIO()):
-            df = yf.download("XRP-USD", period=period, progress=False, auto_adjust=True)
-        if df is not None and not df.empty:
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
-            df = df[["Open", "High", "Low", "Close", "Volume"]]
-            df.dropna(inplace=True)
-            if not df.empty:
-                df.index = pd.to_datetime(df.index)
-                if df.index.tz is None:
-                    df.index = df.index.tz_localize("UTC").tz_convert("Asia/Jakarta")
-                else:
-                    df.index = df.index.tz_convert("Asia/Jakarta")
-                return df
-    except Exception:
-        pass
-
-    # ── Fallback: CoinGecko ──
+    # Coba endpoint market_chart dulu
     urls = [
         {
             "url": "https://api.coingecko.com/api/v3/coins/ripple/market_chart",
@@ -389,7 +369,7 @@ def fetch_data(period):
     for endpoint in urls:
         for attempt in range(3):
             try:
-                time.sleep(2)
+                time.sleep(2)  # jeda sebelum request
                 r = requests.get(endpoint["url"], params=endpoint["params"], timeout=20)
                 if r.status_code == 429:
                     time.sleep(15 * (attempt + 1))
