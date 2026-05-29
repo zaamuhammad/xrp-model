@@ -324,10 +324,6 @@ with st.sidebar:
         "3 Bulan":  "3mo",
         "6 Bulan":  "6mo",
         "1 Tahun":  "1y",
-        "2 Tahun":  "2y",
-        "3 Tahun":  "3y",
-        "4 Tahun":  "4y",
-        "5 Tahun":  "5y",
     }
 
     period_label = st.selectbox(
@@ -349,7 +345,7 @@ with st.sidebar:
 def fetch_data(period):
     import time
 
-    days_map = {"1mo": 30, "2mo": 60, "3mo": 90, "6mo": 180, "1y": 365, "2y": 730, "3y": 1095, "4y": 1460, "5y": 1825}
+    days_map = {"1mo": 30, "2mo": 60, "3mo": 90, "6mo": 180, "1y": 365,}
     days = days_map.get(period, 60)
 
     # Coba endpoint market_chart dulu
