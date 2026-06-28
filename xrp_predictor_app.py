@@ -548,7 +548,7 @@ with st.spinner("🔄 Mengambil data XRP/USDT dari CoinGecko..."):
         st.error(f"❌ Gagal fetch data: {e}")
         st.stop()
 
-# ─── MARKET OVERVIEW CARDS ────────────────────────────────────────────────────
+# ─── MARKET OVERVIEW VARIABLES ────────────────────────────────────────────────
 cur  = df["Close"].iloc[-1]
 prev = df["Close"].iloc[-2]
 chg  = cur - prev
@@ -559,40 +559,8 @@ l30  = df["Low"].tail(30).min()
 sg = "▲" if chg >= 0 else "▼"
 dc = "pos" if chg >= 0 else "neg"
 
-st.markdown('<div class="sec">Market Overview</div>', unsafe_allow_html=True)
-
 close_arr_tmp = df["Close"].values
 risk_label, risk_cls, risk_desc = calc_risk(close_arr_tmp)
-
-m1, m2, m3, m4 = st.columns(4)
-
-with m1:
-    st.markdown(f"""<div class="card">
-        <div class="card-lbl">HARGA XRP/USDT</div>
-        <div class="card-val">${cur:.4f}</div>
-        <div class="card-sub {dc}">{sg} ${abs(chg):.4f} ({abs(chgp):.2f}%) hari ini</div>
-    </div>""", unsafe_allow_html=True)
-
-with m2:
-    st.markdown(f"""<div class="card">
-        <div class="card-lbl">TERTINGGI 30 HARI</div>
-        <div class="card-val" style="color:#34d399">${h30:.4f}</div>
-        <div class="card-sub pos">▲ +{((h30 - cur) / cur * 100):.2f}% dari skrg</div>
-    </div>""", unsafe_allow_html=True)
-
-with m3:
-    st.markdown(f"""<div class="card">
-        <div class="card-lbl">TERENDAH 30 HARI</div>
-        <div class="card-val" style="color:#f87171">${l30:.4f}</div>
-        <div class="card-sub neg">▼ {((l30 - cur) / cur * 100):.2f}% dari skrg</div>
-    </div>""", unsafe_allow_html=True)
-
-with m4:
-    st.markdown(f"""<div class="card">
-        <div class="card-lbl">LEVEL RISIKO</div>
-        <div class="card-val {risk_cls}" style="font-size:1.35rem">{risk_label}</div>
-        <div class="card-sub">{risk_desc}</div>
-    </div>""", unsafe_allow_html=True)
 
 # ─── PREDICTION CARDS ─────────────────────────────────────────────────────────
 st.markdown('<div class="sec">Analisis Prediksi LSTM</div>', unsafe_allow_html=True)
@@ -706,21 +674,11 @@ with p3:
     </div>""", unsafe_allow_html=True)
 
 with p4:
-    if pred_high is not None and pred_low is not None:
-        rng = pred_high - pred_low
-        rp  = rng / cur * 100
-        if rng == 0:
-            val = f"${pred_high:.4f}"
-            sub = f'<span style="color:#a78bfa">1 hari = 1 titik prediksi</span>'
-        else:
-            val = f"${rng:.4f}"
-            sub = f'<span style="color:#a78bfa">± {rp/2:.2f}% dari skrg</span>'
-    else:
-        val = '<span style="color:#1e3a5f;font-size:.9rem">Klik Prediksi</span>'
-        sub = '<span style="color:#1e3a5f">——</span>'
+    val = f"${cur:.4f}"
+    sub = f'<span class="{dc}">{sg} ${abs(chg):.4f} ({abs(chgp):.2f}%) hari ini</span>'
     st.markdown(f"""<div class="pcard">
-        <div class="pcard-lbl">RANGE PREDIKSI</div>
-        <div class="pcard-val" style="color:#a78bfa">{val}</div>
+        <div class="pcard-lbl">HARGA XRP/USDT</div>
+        <div class="pcard-val" style="color:#1d4ed8">{val}</div>
         <div class="pcard-sub">{sub}</div>
     </div>""", unsafe_allow_html=True)
 
@@ -745,7 +703,17 @@ if future_pred is not None and len(future_pred):
             "Δ USD":              f"{'▲' if d_usd>=0 else '▼'} ${abs(d_usd):.4f}",
             "Δ (%)":              f"{'▲' if d_pct>=0 else '▼'} {abs(d_pct):.2f}%",
         })
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    df_pred = pd.DataFrame(rows)
+    st.dataframe(df_pred, use_container_width=True, hide_index=True)
+
+    # ─── DOWNLOAD BUTTON ──────────────────────────────────────────────────────
+    csv_data = df_pred.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="⬇️ Download Hasil Prediksi (CSV)",
+        data=csv_data,
+        file_name=f"prediksi_xrp_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        mime="text/csv",
+    )
 
 # ─── FOOTER ───────────────────────────────────────────────────────────────────
 wib = pytz.timezone("Asia/Jakarta")
