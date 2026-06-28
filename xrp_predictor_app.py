@@ -10,7 +10,6 @@ import json
 import os
 from datetime import datetime, timedelta
 import warnings
-import pytz
 warnings.filterwarnings("ignore")
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
@@ -84,14 +83,13 @@ h1, h2, h3, h4, h5, h6 {
     background: rgba(255,255,255,0.72);
     border: 1px solid rgba(255,255,255,0.55);
     border-radius: 22px;
-    padding: 1.4rem 1.2rem;
+    padding: 1.2rem;
     text-align: center;
     backdrop-filter: blur(16px);
     box-shadow:
         0 8px 30px rgba(59,130,246,0.10),
         inset 0 1px 0 rgba(255,255,255,0.5);
     transition: all .25s ease;
-    height: 100%;
 }
 
 .card:hover {
@@ -137,7 +135,6 @@ h1, h2, h3, h4, h5, h6 {
         0 8px 28px rgba(59,130,246,0.10),
         inset 0 1px 0 rgba(255,255,255,0.6);
     transition: all .25s ease;
-    height: 100%;
 }
 
 .pcard:hover {
@@ -304,10 +301,7 @@ div[data-testid="stDataFrame"] tbody tr:hover {
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: #dbeafe; }
-::-webkit-scrollbar-thumb {
-    background: linear-gradient(#60a5fa,#2563eb);
-    border-radius: 999px;
-}
+::-webkit-scrollbar-thumb { background: linear-gradient(#60a5fa,#2563eb); border-radius: 999px; }
 ::-webkit-scrollbar-thumb:hover { background: linear-gradient(#3b82f6,#1d4ed8); }
 </style>
 """, unsafe_allow_html=True)
@@ -318,18 +312,19 @@ with st.sidebar:
     st.markdown('<div class="sidebar-title"> DASHBOARD</div>', unsafe_allow_html=True)
     st.markdown("---")
 
+    # Minimal 2 bulan — opsi 1 bulan dihapus
     period_map = {
-        "1 Bulan":  "1mo",
         "2 Bulan":  "2mo",
         "3 Bulan":  "3mo",
         "6 Bulan":  "6mo",
         "1 Tahun":  "1y",
+        "2 Tahun":  "2y"
     }
 
     period_label = st.selectbox(
         "Periode Historis",
         list(period_map.keys()),
-        index=1
+        index=0   # default = 2 Bulan
     )
 
     period   = period_map[period_label]
@@ -343,66 +338,32 @@ with st.sidebar:
 
 @st.cache_data(ttl=3600)
 def fetch_data(period):
-    import time
+    url = "https://api.coingecko.com/api/v3/coins/ripple/market_chart"
 
-    days_map = {"1mo": 30, "2mo": 60, "3mo": 90, "6mo": 180, "1y": 365,}
-    days = days_map.get(period, 60)
+    days_map = {
+        "2mo": 60,
+        "3mo": 90,
+        "6mo": 180,
+        "1y":  365,
+        "2y":  730
+    }
 
-    urls = [
-        {
-            "url": "https://api.coingecko.com/api/v3/coins/ripple/market_chart",
-            "params": {"vs_currency": "usd", "days": days, "interval": "daily"},
-            "type": "market_chart"
-        },
-        {
-            "url": "https://api.coingecko.com/api/v3/coins/ripple/ohlc",
-            "params": {"vs_currency": "usd", "days": days},
-            "type": "ohlc"
-        }
-    ]
+    params = {"vs_currency": "usd", "days": days_map.get(period, 60)}
+    r = requests.get(url, params=params, timeout=10).json()
 
-    for endpoint in urls:
-        for attempt in range(3):
-            try:
-                time.sleep(2)
-                r = requests.get(endpoint["url"], params=endpoint["params"], timeout=20)
-                if r.status_code == 429:
-                    time.sleep(15 * (attempt + 1))
-                    continue
-                if r.status_code != 200:
-                    continue
-                data = r.json()
+    df = pd.DataFrame(r["prices"], columns=["timestamp", "Close"])
+    df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
+    df.set_index("Date", inplace=True)
 
-                if endpoint["type"] == "ohlc":
-                    if isinstance(data, list) and len(data) > 0:
-                        df = pd.DataFrame(data, columns=["timestamp", "Open", "High", "Low", "Close"])
-                        df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
-                        df.set_index("Date", inplace=True)
-                        # ✅ FIX: normalize() hapus komponen jam
-                        df.index = df.index.tz_localize("UTC").tz_convert("Asia/Jakarta").normalize()
-                        df["Volume"] = 0
-                        df = df[["Open", "High", "Low", "Close", "Volume"]]
-                        df.dropna(inplace=True)
-                        return df
+    df["Open"]   = df["Close"].shift(1)
+    df["Open"].iloc[0] = df["Close"].iloc[0]
+    df["High"]   = df[["Open", "Close"]].max(axis=1) * 1.01
+    df["Low"]    = df[["Open", "Close"]].min(axis=1) * 0.99
+    df["Volume"] = 0
 
-                elif endpoint["type"] == "market_chart":
-                    if "prices" in data and len(data["prices"]) > 0:
-                        df = pd.DataFrame(data["prices"], columns=["timestamp", "Close"])
-                        df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
-                        df.set_index("Date", inplace=True)
-                        # ✅ FIX: normalize() hapus komponen jam
-                        df.index = df.index.tz_localize("UTC").tz_convert("Asia/Jakarta").normalize()
-                        df["Open"]   = df["Close"].shift(1).fillna(df["Close"])
-                        df["High"]   = df[["Open", "Close"]].max(axis=1) * 1.01
-                        df["Low"]    = df[["Open", "Close"]].min(axis=1) * 0.99
-                        df["Volume"] = 0
-                        df = df[["Open", "High", "Low", "Close", "Volume"]]
-                        df.dropna(inplace=True)
-                        return df
-            except Exception:
-                time.sleep(5)
-
-    raise ValueError("Gagal mengambil data. Coba refresh halaman dalam beberapa menit.")
+    df = df[["Open", "High", "Low", "Close", "Volume"]]
+    df.dropna(inplace=True)
+    return df
 
 @st.cache_resource
 def load_model_scaler():
@@ -453,9 +414,9 @@ def predict_history(model, scaler, close_arr, window):
 def calc_risk(close_arr):
     ret   = pd.Series(close_arr).pct_change().dropna()
     volat = ret.std() * 100
-    if volat > 4:   return "TINGGI 🔴", "neg", "⚠️ Volatilitas tinggi"
-    elif volat > 2: return "SEDANG 🟡", "neu", "⚡ Waspadai pergerakan"
-    else:           return "RENDAH 🟢", "pos", "✅ Kondisi relatif stabil"
+    if volat > 4:   return "TINGGI 🔴",  "neg", "⚠️ Volatilitas tinggi"
+    elif volat > 2: return "SEDANG 🟡",  "neu", "⚡ Waspadai pergerakan"
+    else:           return "RENDAH 🟢",  "pos", "✅ Kondisi relatif stabil"
 
 def calc_confidence(close_arr, conn_y):
     MAPE = 3.0846 / 100
@@ -484,7 +445,7 @@ def line_chart(df_hist, hist_dates, hist_pred, future_dates, future_pred, close_
         ))
 
     if future_pred is not None and len(future_pred):
-        conn_x = [df_hist.index[-1]] + list(future_dates)
+        conn_x = [df_hist.index[-1]] + future_dates
         conn_y = [df_hist["Close"].iloc[-1]] + list(future_pred)
 
         ub, lb = calc_confidence(close_arr, conn_y)
@@ -513,7 +474,7 @@ def line_chart(df_hist, hist_dates, hist_pred, future_dates, future_pred, close_
             line_dash="dash", line_color="rgba(255,255,255,0.15)", line_width=1
         )
         fig.add_annotation(
-            x=df_hist.index[-1], y=max(conn_y) * 1.01,
+            x=df_hist.index[-1], y=max(conn_y)*1.01,
             text="▶ Prediksi", showarrow=False,
             font=dict(color="#38bdf8", size=10, family="Space Mono")
         )
@@ -528,17 +489,13 @@ def line_chart(df_hist, hist_dates, hist_pred, future_dates, future_pred, close_
         hovermode="x unified",
         height=460,
         margin=dict(l=10, r=10, t=30, b=10),
-        xaxis=dict(
-            gridcolor="#0f1f35",
-            showgrid=True,
-            tickformat="%d %b %Y",   # ✅ FIX: sumbu X tanpa jam
-        ),
+        xaxis=dict(gridcolor="#0f1f35", showgrid=True),
         yaxis=dict(gridcolor="#0f1f35", showgrid=True, tickprefix="$", tickformat=".4f"),
     )
     return fig
 
 # ─── FETCH DATA ───────────────────────────────────────────────────────────────
-with st.spinner("🔄 Mengambil data XRP/USDT dari CoinGecko..."):
+with st.spinner("🔄 Mengambil data XRP/USDT..."):
     try:
         df = fetch_data(period)
         if len(df) < WINDOW + 2:
@@ -548,7 +505,7 @@ with st.spinner("🔄 Mengambil data XRP/USDT dari CoinGecko..."):
         st.error(f"❌ Gagal fetch data: {e}")
         st.stop()
 
-# ─── MARKET OVERVIEW CARDS ────────────────────────────────────────────────────
+# ─── MARKET OVERVIEW — 4 CARDS ────────────────────────────────────────────────
 cur  = df["Close"].iloc[-1]
 prev = df["Close"].iloc[-2]
 chg  = cur - prev
@@ -559,11 +516,27 @@ l30  = df["Low"].tail(30).min()
 sg = "▲" if chg >= 0 else "▼"
 dc = "pos" if chg >= 0 else "neg"
 
+# volume 24 jam dari CoinGecko market endpoint
+@st.cache_data(ttl=3600)
+def fetch_volume():
+    try:
+        r = requests.get(
+            "https://api.coingecko.com/api/v3/coins/ripple",
+            params={"localization": "false", "tickers": "false",
+                    "community_data": "false", "developer_data": "false"},
+            timeout=8
+        ).json()
+        return r["market_data"]["total_volume"]["usd"]
+    except Exception:
+        return None
+
+vol24 = fetch_volume()
+if vol24 is not None:
+    vs = f"${vol24/1e9:.2f}B" if vol24 >= 1e9 else f"${vol24/1e6:.1f}M"
+else:
+    vs = "N/A"
+
 st.markdown('<div class="sec">Market Overview</div>', unsafe_allow_html=True)
-
-close_arr_tmp = df["Close"].values
-risk_label, risk_cls, risk_desc = calc_risk(close_arr_tmp)
-
 m1, m2, m3, m4 = st.columns(4)
 
 with m1:
@@ -577,37 +550,35 @@ with m2:
     st.markdown(f"""<div class="card">
         <div class="card-lbl">TERTINGGI 30 HARI</div>
         <div class="card-val" style="color:#34d399">${h30:.4f}</div>
-        <div class="card-sub pos">▲ +{((h30 - cur) / cur * 100):.2f}% dari skrg</div>
+        <div class="card-sub pos">▲ +{((h30-cur)/cur*100):.2f}% dari skrg</div>
     </div>""", unsafe_allow_html=True)
 
 with m3:
     st.markdown(f"""<div class="card">
         <div class="card-lbl">TERENDAH 30 HARI</div>
         <div class="card-val" style="color:#f87171">${l30:.4f}</div>
-        <div class="card-sub neg">▼ {((l30 - cur) / cur * 100):.2f}% dari skrg</div>
+        <div class="card-sub neg">▼ {((l30-cur)/cur*100):.2f}% dari skrg</div>
     </div>""", unsafe_allow_html=True)
 
 with m4:
     st.markdown(f"""<div class="card">
-        <div class="card-lbl">LEVEL RISIKO</div>
-        <div class="card-val {risk_cls}" style="font-size:1.35rem">{risk_label}</div>
-        <div class="card-sub">{risk_desc}</div>
+        <div class="card-lbl">VOLUME 24 JAM</div>
+        <div class="card-val" style="color:#a78bfa;font-size:1.45rem">{vs}</div>
+        <div class="card-sub" style="color:#475569">USDT</div>
     </div>""", unsafe_allow_html=True)
 
-# ─── PREDICTION CARDS ─────────────────────────────────────────────────────────
+st.markdown("<br>", unsafe_allow_html=True)
+
+# ─── PREDICTION SECTION ───────────────────────────────────────────────────────
 st.markdown('<div class="sec">Analisis Prediksi LSTM</div>', unsafe_allow_html=True)
 
-close_arr = df["Close"].values
+close_arr     = df["Close"].values
+hist_dates    = None
+hist_pred_arr = None
+future_dates  = []
+future_pred   = None
+nxt = pred_high = pred_low = None
 risk_label, risk_cls, risk_desc = calc_risk(close_arr)
-
-# Inisialisasi session_state
-if "hist_dates"        not in st.session_state: st.session_state.hist_dates        = None
-if "hist_pred_arr"     not in st.session_state: st.session_state.hist_pred_arr     = None
-if "future_dates"      not in st.session_state: st.session_state.future_dates      = []
-if "future_pred"       not in st.session_state: st.session_state.future_pred       = None
-if "nxt"               not in st.session_state: st.session_state.nxt               = None
-if "pred_high"         not in st.session_state: st.session_state.pred_high         = None
-if "pred_low"          not in st.session_state: st.session_state.pred_low          = None
 
 if run_btn:
     model, scaler, errors = load_model_scaler()
@@ -627,47 +598,28 @@ if run_btn:
         with st.spinner(f"Memprediksi {n_future} hari ke depan..."):
             try:
                 future_pred   = predict_future(model, scaler, close_arr, WINDOW, n_future)
-
-                # ✅ FIX: future_dates pakai normalize() agar jam = 00:00
-                future_dates  = pd.DatetimeIndex([
-                    (df.index[-1] + timedelta(days=i+1)).normalize()
-                    for i in range(n_future)
-                ])
-
+                future_dates  = [df.index[-1] + timedelta(days=i+1) for i in range(n_future)]
                 hist_pred_arr = predict_history(model, scaler, close_arr, WINDOW)
-
-                # ✅ FIX: hist_dates pakai normalize() agar jam = 00:00
-                hist_dates    = df.index[WINDOW:].normalize()
-
-                st.session_state.future_pred        = future_pred
-                st.session_state.future_dates       = future_dates
-                st.session_state.hist_pred_arr      = hist_pred_arr
-                st.session_state.hist_dates         = hist_dates
-                st.session_state.nxt                = future_pred[0]
-                st.session_state.pred_high          = float(max(future_pred))
-                st.session_state.pred_low           = float(min(future_pred))
+                hist_dates    = df.index[WINDOW:]
+                nxt           = future_pred[0]
+                pred_high     = float(max(future_pred))
+                pred_low      = float(min(future_pred))
             except Exception as ex:
                 st.error(f"❌ Error prediksi: {ex}")
                 st.exception(ex)
 
-# Ambil dari session_state
-hist_dates    = st.session_state.hist_dates
-hist_pred_arr = st.session_state.hist_pred_arr
-future_dates  = st.session_state.future_dates
-future_pred   = st.session_state.future_pred
-nxt           = st.session_state.nxt
-pred_high     = st.session_state.pred_high
-pred_low      = st.session_state.pred_low
-
-# ─── PREDICTION DISPLAY CARDS ─────────────────────────────────────────────────
+# ─── 4 PREDICTION CARDS ───────────────────────────────────────────────────────
 p1, p2, p3, p4 = st.columns(4)
 
+# Card 1 — Prediksi Besok
 with p1:
     if nxt is not None:
-        d_usd = nxt - cur; d_pct = d_usd / cur * 100
-        sg2 = "▲" if d_usd >= 0 else "▼"; cls2 = "pos" if d_usd >= 0 else "neg"
-        val = f"${nxt:.4f}"
-        sub = f'<span class="{cls2}">{sg2} ${abs(d_usd):.4f} ({abs(d_pct):.2f}%)</span>'
+        d_usd = nxt - cur
+        d_pct = d_usd / cur * 100
+        sg2   = "▲" if d_usd >= 0 else "▼"
+        cls2  = "pos" if d_usd >= 0 else "neg"
+        val   = f"${nxt:.4f}"
+        sub   = f'<span class="{cls2}">{sg2} ${abs(d_usd):.4f} ({abs(d_pct):.2f}%)</span>'
     else:
         val = '<span style="color:#1e3a5f;font-size:.9rem">Klik Prediksi</span>'
         sub = '<span style="color:#1e3a5f">——</span>'
@@ -677,6 +629,7 @@ with p1:
         <div class="pcard-sub">{sub}</div>
     </div>""", unsafe_allow_html=True)
 
+# Card 2 — Target Tertinggi
 with p2:
     if pred_high is not None:
         hp  = (pred_high - cur) / cur * 100
@@ -691,6 +644,7 @@ with p2:
         <div class="pcard-sub">{sub}</div>
     </div>""", unsafe_allow_html=True)
 
+# Card 3 — Target Terendah
 with p3:
     if pred_low is not None:
         lp  = (pred_low - cur) / cur * 100
@@ -705,23 +659,14 @@ with p3:
         <div class="pcard-sub">{sub}</div>
     </div>""", unsafe_allow_html=True)
 
+# Card 4 — Harga Sekarang (menggantikan Level Risiko & Range Prediksi)
 with p4:
-    if pred_high is not None and pred_low is not None:
-        rng = pred_high - pred_low
-        rp  = rng / cur * 100
-        if rng == 0:
-            val = f"${pred_high:.4f}"
-            sub = f'<span style="color:#a78bfa">1 hari = 1 titik prediksi</span>'
-        else:
-            val = f"${rng:.4f}"
-            sub = f'<span style="color:#a78bfa">± {rp/2:.2f}% dari skrg</span>'
-    else:
-        val = '<span style="color:#1e3a5f;font-size:.9rem">Klik Prediksi</span>'
-        sub = '<span style="color:#1e3a5f">——</span>'
+    mc = "pos" if chg >= 0 else "neg"
+    sg3 = "▲" if chg >= 0 else "▼"
     st.markdown(f"""<div class="pcard">
-        <div class="pcard-lbl">RANGE PREDIKSI</div>
-        <div class="pcard-val" style="color:#a78bfa">{val}</div>
-        <div class="pcard-sub">{sub}</div>
+        <div class="pcard-lbl">HARGA SEKARANG</div>
+        <div class="pcard-val" style="color:#1d4ed8">${cur:.4f}</div>
+        <div class="pcard-sub"><span class="{mc}">{sg3} {abs(chgp):.2f}% hari ini</span></div>
     </div>""", unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
@@ -731,9 +676,10 @@ st.markdown('<div class="sec">Grafik Harga Aktual vs Prediksi</div>', unsafe_all
 fig = line_chart(df, hist_dates, hist_pred_arr, future_dates, future_pred, close_arr)
 st.plotly_chart(fig, use_container_width=True)
 
-# ─── TABEL PREDIKSI ───────────────────────────────────────────────────────────
+# ─── TABEL PREDIKSI + DOWNLOAD ────────────────────────────────────────────────
 if future_pred is not None and len(future_pred):
     st.markdown('<div class="sec">Tabel Prediksi Harian</div>', unsafe_allow_html=True)
+
     rows = []
     for i, (d, p) in enumerate(zip(future_dates, future_pred)):
         d_usd = p - cur
@@ -741,18 +687,30 @@ if future_pred is not None and len(future_pred):
         rows.append({
             "Hari ke":            f"H+{i+1}",
             "Tanggal":            d.strftime("%d %b %Y"),
-            "Prediksi Harga ($)": f"${p:.4f}",
-            "Δ USD":              f"{'▲' if d_usd>=0 else '▼'} ${abs(d_usd):.4f}",
-            "Δ (%)":              f"{'▲' if d_pct>=0 else '▼'} {abs(d_pct):.2f}%",
+            "Prediksi Harga ($)": round(p, 4),
+            "Δ USD":              round(d_usd, 4),
+            "Δ (%)":              round(d_pct, 2),
+            "Sinyal":             "▲ NAIK" if d_usd >= 0 else "▼ TURUN",
         })
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    df_pred = pd.DataFrame(rows)
+
+    # Tampilkan tabel
+    st.dataframe(df_pred, use_container_width=True, hide_index=True)
+
+    # ── Tombol Download CSV ──
+    csv_bytes = df_pred.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="⬇️  Download Hasil Prediksi (.csv)",
+        data=csv_bytes,
+        file_name=f"prediksi_xrp_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
 
 # ─── FOOTER ───────────────────────────────────────────────────────────────────
-wib = pytz.timezone("Asia/Jakarta")
-now_wib = datetime.now(wib)
-
 st.markdown(f"""
 <div class="footer">
-LAST UPDATE: {now_wib.strftime("%Y-%m-%d %H:%M:%S")} WIB ·
+LAST UPDATE: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} ·
 </div>
 """, unsafe_allow_html=True)
