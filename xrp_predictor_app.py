@@ -319,7 +319,6 @@ with st.sidebar:
     st.markdown("---")
 
     period_map = {
-        "1 Bulan":  "1mo",
         "2 Bulan":  "2mo",
         "3 Bulan":  "3mo",
         "6 Bulan":  "6mo",
@@ -329,7 +328,7 @@ with st.sidebar:
     period_label = st.selectbox(
         "Periode Historis",
         list(period_map.keys()),
-        index=1
+        index=0
     )
 
     period   = period_map[period_label]
@@ -378,7 +377,7 @@ def fetch_data(period):
                         df = pd.DataFrame(data, columns=["timestamp", "Open", "High", "Low", "Close"])
                         df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
                         df.set_index("Date", inplace=True)
-                        # ✅ FIX: normalize() hapus komponen jam
+                        
                         df.index = df.index.tz_localize("UTC").tz_convert("Asia/Jakarta").normalize()
                         df["Volume"] = 0
                         df = df[["Open", "High", "Low", "Close", "Volume"]]
@@ -390,7 +389,7 @@ def fetch_data(period):
                         df = pd.DataFrame(data["prices"], columns=["timestamp", "Close"])
                         df["Date"] = pd.to_datetime(df["timestamp"], unit="ms")
                         df.set_index("Date", inplace=True)
-                        # ✅ FIX: normalize() hapus komponen jam
+                        
                         df.index = df.index.tz_localize("UTC").tz_convert("Asia/Jakarta").normalize()
                         df["Open"]   = df["Close"].shift(1).fillna(df["Close"])
                         df["High"]   = df[["Open", "Close"]].max(axis=1) * 1.01
@@ -531,7 +530,7 @@ def line_chart(df_hist, hist_dates, hist_pred, future_dates, future_pred, close_
         xaxis=dict(
             gridcolor="#0f1f35",
             showgrid=True,
-            tickformat="%d %b %Y",   # ✅ FIX: sumbu X tanpa jam
+            tickformat="%d %b %Y",  
         ),
         yaxis=dict(gridcolor="#0f1f35", showgrid=True, tickprefix="$", tickformat=".4f"),
     )
@@ -596,7 +595,7 @@ if run_btn:
             try:
                 future_pred   = predict_future(model, scaler, close_arr, WINDOW, n_future)
 
-                # ✅ FIX: future_dates pakai normalize() agar jam = 00:00
+               
                 future_dates  = pd.DatetimeIndex([
                     (df.index[-1] + timedelta(days=i+1)).normalize()
                     for i in range(n_future)
@@ -604,7 +603,7 @@ if run_btn:
 
                 hist_pred_arr = predict_history(model, scaler, close_arr, WINDOW)
 
-                # ✅ FIX: hist_dates pakai normalize() agar jam = 00:00
+                
                 hist_dates    = df.index[WINDOW:].normalize()
 
                 st.session_state.future_pred        = future_pred
